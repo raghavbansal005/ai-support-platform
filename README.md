@@ -90,19 +90,66 @@ in a browser and paste your snippet in place of the placeholder.
 > cleanly for the frontend, and `tsc --noEmit` passes for the backend aside from the one
 > Prisma-client-generation-dependent type.
 
-## Deploying
+## Deploying (free tier: Vercel + Render)
 
-- **Frontend → Vercel or Netlify:** import the `frontend/` directory as the project root
-  (build command `npm run build`, output directory `dist`), set `VITE_API_URL` to your
-  deployed backend URL as a build-time env var.
-- **Backend → Railway or Render:** deploy the `backend/` directory as-is. Since SQLite is a
-  file, attach a small persistent volume/disk (Railway: "Volumes"; Render: "Disks") mounted
-  at, say, `/app/data`, and set `DATABASE_URL=file:/app/data/dev.db`. Also set `JWT_SECRET`,
-  `ANTHROPIC_API_KEY`, `FRONTEND_URL` (your Vercel URL), and
-  `PUBLIC_API_URL` (this service's own public URL — the widget calls it directly from
-  customer sites, so it must be reachable publicly; CORS is already open by default).
-- Run `npm run prisma:deploy` once against the production volume before first boot (the
-  Dockerfile's `CMD` already does this automatically on every container start).
+This deploys with zero cost using Render's free web service and Vercel's free Hobby tier. The
+one tradeoff: Render's free tier has no persistent disk, so the SQLite file resets whenever the
+backend restarts or spins down from inactivity (free instances sleep after ~15 min idle). The
+backend's `CMD` already re-runs migrations and re-seeds the demo login on every boot, so it
+always comes back working — you'll just need to re-upload the sample KB docs if it's been idle
+a while before someone views it. See the note at the end of this section for the paid,
+persistent alternative.
+
+### 1. Deploy the backend to Render
+
+1. Go to https://dashboard.render.com → **New +** → **Web Service** → connect your GitHub repo.
+2. **Root Directory:** `backend`. Render will detect the `Dockerfile` automatically.
+3. **Instance Type:** Free.
+4. Pick a service name (e.g. `your-name-support-api`) — this fixes your public URL as
+   `https://your-name-support-api.onrender.com`, so you can fill in the URL-dependent env vars
+   below before the first deploy even finishes.
+5. Add environment variables:
+DATABASE_URL=file:./dev.db
+JWT_SECRET=<any long random string>
+ANTHROPIC_API_KEY=<your key>
+ANTHROPIC_MODEL=claude-sonnet-5
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+PUBLIC_API_URL=https://your-name-support-api.onrender.com
+FRONTEND_URL=https://your-name-support.vercel.app
+   (You won't know the exact Vercel URL until step 2 — it's fine to guess it now based on your
+   project name and fix it after, since Render redeploys automatically whenever you change an
+   env var.)
+6. Click **Create Web Service** and wait for the first deploy to finish (a few minutes — it's
+   also downloading the local embedding model on first boot).
+
+### 2. Deploy the frontend to Vercel
+
+1. Go to https://vercel.com/new → import the same GitHub repo.
+2. **Root Directory:** `frontend`. Vercel auto-detects Vite (build command `npm run build`,
+   output directory `dist`) — no changes needed there.
+3. Add environment variable: `VITE_API_URL=https://your-name-support-api.onrender.com` (your
+   real Render URL from step 1).
+4. Click **Deploy**.
+
+### 3. Connect the two
+
+If the Vercel URL Vercel actually gave you differs from what you guessed in step 1.5, go back to
+the Render service → **Environment** → update `FRONTEND_URL` to the real Vercel URL, and save
+(Render redeploys automatically).
+
+### 4. Verify
+
+Visit your Vercel URL, log in with the seeded demo login (`admin@demo-acme.com` /
+`Demo@12345`), upload the sample KB docs, copy the embed snippet, and test it in
+`docs/test-widget-host.html` pointed at your live URLs instead of localhost.
+
+### If you want real persistence later (costs money)
+
+Upgrade the Render service to a paid **Starter** instance, attach a **Disk** (Render dashboard →
+your service → Disks) mounted at `/app/data`, set `DATABASE_URL=file:/app/data/dev.db`, and
+remove the `&& npm run seed` step from the Dockerfile's `CMD` so it stops overwriting real data
+on every restart.
+
 - **Scaling note:** SQLite is one file, so it's naturally single-writer/single-instance. That's
   the right tradeoff for a take-home or an early-stage single-tenant-per-deploy setup; if this
   needs to run multiple backend replicas behind a load balancer, swap `DATABASE_URL` for a

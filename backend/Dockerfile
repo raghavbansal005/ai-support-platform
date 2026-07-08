@@ -10,4 +10,4 @@ RUN npm run prisma:generate
 RUN npm run build
 
 EXPOSE 4000
-CMD ["sh", "-c", "npm run prisma:deploy && node dist/index.js"]
+CMD ["sh", "-c", "npm run prisma:deploy && npm run seed && node dist/index.js"]
