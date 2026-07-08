@@ -4,6 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2021"],
     "outDir": "dist",
+    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,5 +14,5 @@
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts", "prisma/seed.ts"]
+  "include": ["src/**/*.ts"]
 }
