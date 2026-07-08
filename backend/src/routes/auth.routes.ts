@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { signToken } from "../middleware/auth";
 import { ApiError } from "../middleware/errorHandler";
+import type { Role } from "../types/enums";
 
 export const authRouter = Router();
 
@@ -38,7 +39,7 @@ authRouter.post("/register", async (req, res) => {
   });
 
   const user = business.users[0];
-  const token = signToken({ userId: user.id, businessId: business.id, role: user.role });
+  const token = signToken({ userId: user.id, businessId: business.id, role: user.role as Role });
   res.status(201).json({ token, business: { id: business.id, name: business.name, slug: business.slug }, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
@@ -52,7 +53,7 @@ authRouter.post("/login", async (req, res) => {
   const valid = await bcrypt.compare(body.password, user.passwordHash);
   if (!valid) throw new ApiError(401, "Invalid email or password");
 
-  const token = signToken({ userId: user.id, businessId: user.businessId, role: user.role });
+  const token = signToken({ userId: user.id, businessId: user.businessId, role: user.role as Role });
   res.json({
     token,
     business: { id: user.business.id, name: user.business.name, slug: user.business.slug },
