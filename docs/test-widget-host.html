@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Test host site - Acme Corp</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 80px auto; color: #222; }
+    h1 { font-size: 22px; }
+    p { color: #555; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1>This is a stand-in for a customer's real website.</h1>
+  <p>
+    The chat bubble in the bottom-right corner is the embedded SupportBot widget, loaded exactly
+    the way a customer would drop it into their own site: one script tag, no build step. Open the
+    AI Configuration page in the admin console, copy the embed snippet it shows for your business,
+    and paste it below in place of the placeholder to test end-to-end against your running backend.
+  </p>
+
+  <!-- Replace WIDGET_KEY and API_URL with the values from the AI Configuration page -->
+  <script src="http://localhost:3000/widget.js" data-widget-key="11cca2fd-3e70-45a5-975b-e45139778e95" data-api-url="http://localhost:4000" async></script>
+</body>
+</html>

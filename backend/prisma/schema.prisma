@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Plain SQLite file - no server to install/run, no extensions to enable.
+// The tradeoff: SQLite has no native enum or vector type, so:
+//  - enum-like fields are plain String columns, validated with zod in the route layer
+//    (see backend/src/types/enums.ts for the canonical allowed values)
+//  - embeddings are stored as a JSON-stringified number array and compared with an
+//    in-app cosine-similarity function (backend/src/lib/vectorSearch.ts) instead of a
+//    SQL-level vector operator. Fine at this scale; see ARCHITECTURE.md for the tradeoff.
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Multi-tenant core ----------
+
+model Business {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  widgetKey String   @unique @default(uuid()) // public key embedded in widget.js snippet
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  aiConfig      AIConfig?
+  documents     KnowledgeDocument[]
+  conversations Conversation[]
+  tickets       Ticket[]
+}
+
+model User {
+  id               String    @id @default(uuid())
+  businessId       String
+  business         Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  email            String
+  passwordHash     String
+  name             String
+  role             String    @default("OWNER") // OWNER | ADMIN | AGENT
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@unique([businessId, email])
+  @@index([email])
+}
+
+// ---------- AI configuration ----------
+
+model AIConfig {
+  id              String   @id @default(uuid())
+  businessId      String   @unique
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  botName         String   @default("SupportBot")
+  welcomeMessage  String   @default("Hi! How can I help you today?")
+  personality     String   @default("Professional") // Professional | Friendly | Technical
+  model           String   @default("claude-sonnet-5")
+  escalationRules String   @default("[\"refund_requested\",\"legal_complaint\",\"customer_angry\",\"human_requested\"]") // JSON-stringified string[] - SQLite has no Json type
+  updatedAt       DateTime @updatedAt
+}
+
+// ---------- Knowledge base ----------
+
+model KnowledgeDocument {
+  id           String    @id @default(uuid())
+  businessId   String
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  filename     String
+  fileType     String
+  sizeBytes    Int
+  storagePath  String // path on local/object storage so "re-index" can re-run without re-upload
+  status       String    @default("PENDING") // PENDING | PROCESSING | INDEXED | FAILED
+  errorMessage String?
+  uploadedAt   DateTime  @default(now())
+  indexedAt    DateTime?
+
+  chunks DocumentChunk[]
+
+  @@index([businessId])
+}
+
+model DocumentChunk {
+  id         String            @id @default(uuid())
+  documentId String
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  businessId String // denormalized for fast per-tenant scoping of the similarity search
+  chunkIndex Int
+  content    String
+  tokenCount Int
+  embedding  String? // JSON-stringified number[] (1536-dim); compared in-app, see lib/vectorSearch.ts
+  createdAt  DateTime @default(now())
+
+  @@index([businessId])
+  @@index([documentId])
+}
+
+// ---------- Conversations ----------
+
+model Conversation {
+  id                 String   @id @default(uuid())
+  businessId         String
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  channel            String   @default("WIDGET") // WIDGET | WHATSAPP | EMAIL
+  customerName       String?
+  customerEmail      String?
+  customerIdentifier String // session id / phone / email - used to resume a conversation
+  status             String   @default("OPEN") // OPEN | RESOLVED
+  escalated          Boolean  @default(false)
+  startedAt          DateTime @default(now())
+  lastMessageAt      DateTime @default(now())
+
+  messages   Message[]
+  tickets    Ticket[]
+  escalation EscalationEvent[]
+
+  @@index([businessId])
+  @@index([customerIdentifier])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // USER | ASSISTANT | SYSTEM
+  content        String // plain-text fallback
+  richContent    String? // JSON-stringified: { type: 'list'|'table'|'card'|'links'|'text', ... }
+  sources        String? // JSON-stringified array of { documentId, filename } used for grounding
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+}
+
+// ---------- Tickets & escalation ----------
+
+model Ticket {
+  id             String        @id @default(uuid())
+  businessId     String
+  business       Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  customerName   String
+  customerEmail  String
+  query          String
+  priority       String   @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  status         String   @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([status])
+}
+
+model EscalationEvent {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  reason         String
+  priority       String // LOW | MEDIUM | HIGH | URGENT
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+}

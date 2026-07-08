@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DATABASE_URL: "file:/app/data/dev.db"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+      STORAGE_ROOT: /app/storage
+    ports:
+      - "4000:4000"
+    volumes:
+      - backend_data:/app/data
+      - backend_storage:/app/storage
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  backend_data:
+  backend_storage:
